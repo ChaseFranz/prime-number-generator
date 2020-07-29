@@ -2,14 +2,15 @@
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
 
 namespace ComputePrimeNumbers
 {
     public class PrimeNumberGenerator
     {
-        public ConcurrentBag<int> PrimeNumbers { get; private set; }
+        private ConcurrentBag<int> PrimeNumbers { get; set; }
+
+        public List<int> GetOrderedPrimeNumbers() => PrimeNumbers.OrderBy(p => p).ToList();
 
         /// <summary>
         /// Generates all prime numbers up to N.
@@ -41,6 +42,9 @@ namespace ComputePrimeNumbers
             });
         }
 
+        /// <summary>
+        /// Logs all computed prime numbers to console
+        /// </summary>
         public void LogPrimeNumbers()
         {
             if (PrimeNumbers.IsEmpty)
@@ -50,7 +54,7 @@ namespace ComputePrimeNumbers
             else
             {
                 Console.WriteLine("Prime Numbers:");
-                foreach (int prime in PrimeNumbers.OrderBy(p => p).ToList())
+                foreach (int prime in GetOrderedPrimeNumbers())
                 {
                     Console.Write($"{prime} ");
                 }
