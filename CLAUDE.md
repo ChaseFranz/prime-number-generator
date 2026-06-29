@@ -5,10 +5,10 @@ Guidance for AI assistants working in this repository.
 ## Overview
 
 A small .NET console application that computes all prime numbers from 2 up to a
-user-supplied number `N`. The sieve work is parallelized across cores, execution
-time is measured and printed, and the user can optionally print the discovered
-primes to the console. The program runs an interactive read-eval loop until the
-user enters `-1` to exit.
+user-supplied number `N` with a parallel segmented Sieve of Eratosthenes.
+Execution time is measured and printed, and the user can optionally print the
+discovered primes to the console. The program runs an interactive read-eval loop
+until the user enters `-1` to exit.
 
 ## Layout
 
@@ -27,34 +27,41 @@ The solution name, project name, and root namespace are all `ComputePrimeNumbers
 
 ## Key components
 
-- **`Program`** (`Program.cs`) — Entry point. Holds a single static
-  `PrimeNumberGenerator` instance. `Main` runs an input loop: prompts for a
-  natural number `N`, validates with `int.TryParse`, times `CalculatePrimes(n)`
-  with a `Stopwatch`, prints elapsed seconds, then calls `AskUserToPrintPrimes`.
-  Entering `-1` (the `EXIT_CODE` constant) stops the loop; input `< 2` is ignored
-  silently and the loop re-prompts.
+- **`Program`** (`Program.cs`) — Entry point and all console I/O. Holds a single
+  static `PrimeNumberGenerator` instance. `Main` runs an input loop: prompts for a
+  natural number `N`, reads a line, and exits on end-of-input (a `null` read, e.g.
+  EOF or exhausted piped input). It validates with `int.TryParse`; anything that
+  is neither `>= 2` nor the `EXIT_CODE` constant (`-1`) prints a guidance message
+  and re-prompts. Valid input is timed with a `Stopwatch`, elapsed seconds are
+  printed, and the returned primes are passed to `AskUserToPrintPrimes` →
+  `PrintPrimes`. Entering `-1` stops the loop.
+  - Presentation lives here on purpose: `PrintPrimes(primes)` renders the result
+    (or "No prime numbers"), keeping the computation engine free of `Console`
+    dependencies so it stays unit-testable.
 
 - **`PrimeNumberGenerator`** (`PrimeNumberGenerator.cs`) — The computation engine.
-  - `CalculatePrimes(int n)` — Resets the internal store and uses `Parallel.For`
-    over `2..n` to trial-divide each candidate up to its square root. Primes are
-    collected into a `ConcurrentBag<int>` (thread-safe, unordered).
-  - `GetOrderedPrimeNumbers()` — Returns the bag sorted ascending as
-    `List<int>`. Use this whenever ordered results are needed; the backing
-    `PrimeNumbers` bag is private and unordered.
-  - `LogPrimeNumbers()` — Prints the ordered primes to the console, or a
-    "No prime numbers" message if none were computed.
+  Stateless and free of any `Console` use.
+  - `CalculatePrimes(int n)` — Returns an `IReadOnlyList<int>` of the primes in
+    `[2, n]` in ascending order (empty when `n < 2`). It runs a segmented Sieve of
+    Eratosthenes: base primes up to `sqrt(n)` are found sequentially, then the rest
+    of the range is sieved with `Parallel.For` over **disjoint** segments of a
+    shared `bool[]`. Because no two threads write the same array slot, no locking
+    is needed. The final ascending order falls out of the sieve — no post-sort.
 
 ## Conventions
 
 - **Language/runtime:** C# targeting `netcoreapp3.1`. Keep the target framework in
   sync if you change `ComputePrimeNumbers.csproj`.
-- **Concurrency:** Prime collection is parallel and therefore unordered. Never
-  assume `PrimeNumbers` is sorted — always go through `GetOrderedPrimeNumbers()`.
-  Any shared mutable state added later must be thread-safe (the code uses
-  `ConcurrentBag<int>` for this reason).
-- **Encapsulation:** `PrimeNumbers` is intentionally a private property exposed
-  only via the `GetOrderedPrimeNumbers()` wrapper. Preserve this pattern — do not
-  expose the raw bag.
+- **Concurrency:** Parallelism relies on each segment owning a disjoint slice of
+  the shared `bool[]`, so there are no concurrent writes to the same slot and no
+  locking. If you change the partitioning, preserve that disjointness — otherwise
+  you reintroduce data races. Any other shared mutable state added later must be
+  made thread-safe explicitly.
+- **Separation of concerns:** `PrimeNumberGenerator` is pure computation with no
+  `Console` calls; all I/O and prompting live in `Program`. Keep computation out
+  of `Program` and I/O out of the generator so the prime logic stays testable.
+- **Stateless engine:** `CalculatePrimes` returns its result rather than storing
+  it on the instance. Don't reintroduce shared instance state for results.
 - **Style:** Braces on their own lines (Allman style), `PascalCase` for methods
   and properties, `camelCase` for locals, XML `<summary>` doc comments on public
   methods. Match the existing style when editing.
