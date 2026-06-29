@@ -1,65 +1,88 @@
-﻿using System;
-using System.Collections.Concurrent;
+using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Threading.Tasks;
 
 namespace ComputePrimeNumbers
 {
     public class PrimeNumberGenerator
     {
-        private ConcurrentBag<int> PrimeNumbers { get; set; }
-
-        public List<int> GetOrderedPrimeNumbers() => PrimeNumbers.OrderBy(p => p).ToList();
-
         /// <summary>
-        /// Generates all prime numbers up to N.
+        /// Computes all prime numbers from 2 up to and including <paramref name="n"/>
+        /// using a segmented Sieve of Eratosthenes. The base primes up to sqrt(n) are
+        /// found with a plain sequential sieve, then the remainder of the range is
+        /// sieved in parallel across disjoint segments. Because each segment owns a
+        /// distinct slice of the backing array, threads never write the same slot and
+        /// no locking is required.
         /// </summary>
-        /// <returns></returns>
-        public void CalculatePrimes(int n)
+        /// <param name="n">The inclusive upper bound to search for primes.</param>
+        /// <returns>
+        /// The primes in ascending order, or an empty list when <paramref name="n"/> &lt; 2.
+        /// </returns>
+        public IReadOnlyList<int> CalculatePrimes(int n)
         {
-            PrimeNumbers = new ConcurrentBag<int>();
-            int minPrimeCandidate = 2;
-
-            Parallel.For(minPrimeCandidate, n + 1, (int primeCandidate) =>
+            if (n < 2)
             {
-                bool isPrime = true;
-                double primeCandidateRoot = Math.Sqrt(primeCandidate);
+                return Array.Empty<int>();
+            }
 
-                // check current primeCandidate for prime
-                for (int divisor = 2; divisor <= primeCandidateRoot; divisor++)
+            int sqrt = (int)Math.Sqrt(n);
+
+            // composite[i] becomes true once i is known to be non-prime.
+            bool[] composite = new bool[n + 1];
+
+            // 1. Find the base primes in [2, sqrt(n)] with a sequential sieve.
+            List<int> basePrimes = new List<int>();
+            for (int candidate = 2; candidate <= sqrt; candidate++)
+            {
+                if (!composite[candidate])
                 {
-                    if (primeCandidate % divisor == 0)
+                    basePrimes.Add(candidate);
+                    for (long multiple = (long)candidate * candidate; multiple <= sqrt; multiple += candidate)
                     {
-                        isPrime = false;
-                        break;
+                        composite[multiple] = true;
                     }
                 }
-                if (isPrime)
-                {
-                    PrimeNumbers.Add(primeCandidate);
-                }
-            });
-        }
+            }
 
-        /// <summary>
-        /// Logs all computed prime numbers to console
-        /// </summary>
-        public void LogPrimeNumbers()
-        {
-            if (PrimeNumbers.IsEmpty)
+            // 2. Sieve (sqrt(n), n] in parallel. Each segment is a disjoint slice of the
+            //    array, so segments can be marked concurrently without synchronization.
+            int segmentStart = sqrt + 1;
+            if (segmentStart <= n)
             {
-                Console.WriteLine($"No prime numbers");
-            }
-            else
-            {
-                Console.WriteLine("Prime Numbers:");
-                foreach (int prime in GetOrderedPrimeNumbers())
+                int span = n - segmentStart + 1;
+                int segmentSize = Math.Max(1, span / (Environment.ProcessorCount * 4) + 1);
+                int segmentCount = (span - 1) / segmentSize + 1;
+
+                Parallel.For(0, segmentCount, segmentIndex =>
                 {
-                    Console.Write($"{prime} ");
-                }
-                Console.Write("\n");
+                    int low = segmentStart + segmentIndex * segmentSize;
+                    int high = (int)Math.Min((long)low + segmentSize - 1, n);
+
+                    foreach (int prime in basePrimes)
+                    {
+                        // Start at the larger of prime*prime (smaller multiples carry a
+                        // smaller prime factor already handled) and the first multiple
+                        // of prime that falls within this segment.
+                        long firstMultiple = Math.Max((long)prime * prime, ((low + prime - 1L) / prime) * prime);
+                        for (long multiple = firstMultiple; multiple <= high; multiple += prime)
+                        {
+                            composite[multiple] = true;
+                        }
+                    }
+                });
             }
+
+            // 3. Collect the survivors in ascending order.
+            List<int> primes = new List<int>();
+            for (int i = 2; i <= n; i++)
+            {
+                if (!composite[i])
+                {
+                    primes.Add(i);
+                }
+            }
+
+            return primes;
         }
     }
 }

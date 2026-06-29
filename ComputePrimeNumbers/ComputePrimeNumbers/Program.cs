@@ -1,52 +1,75 @@
-﻿using System;
+using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 
 namespace ComputePrimeNumbers
 {
     class Program
     {
-        private static PrimeNumberGenerator primeNumberGenerator;
-        private static readonly int EXIT_CODE = -1;
+        private const int EXIT_CODE = -1;
+        private static readonly PrimeNumberGenerator primeNumberGenerator = new PrimeNumberGenerator();
 
         public static void Main(string[] args)
         {
-            primeNumberGenerator = new PrimeNumberGenerator();
-
-            bool continueLoop = true;
-            do
+            while (true)
             {
                 Console.WriteLine("Calculate Primes from 2 to N.");
                 Console.WriteLine("Please enter a Natural Number or -1 to exit.");
 
-                bool goodInput = int.TryParse(Console.ReadLine(), out int n);
-
-                if (goodInput && n >= 2)
+                string line = Console.ReadLine();
+                if (line == null)
                 {
-                    Stopwatch stopWatch = new Stopwatch();
-                    stopWatch.Start();
-                    primeNumberGenerator.CalculatePrimes(n);
-                    stopWatch.Stop();
-                    Console.WriteLine($"Execution Time: {stopWatch.Elapsed.TotalSeconds} seconds");
+                    // End of input (EOF or exhausted piped input) — exit cleanly.
+                    break;
+                }
 
-                    AskUserToPrintPrimes();
-                }
-                else if (n == EXIT_CODE)
+                if (!int.TryParse(line, out int n) || (n < 2 && n != EXIT_CODE))
                 {
-                    continueLoop = false;
+                    Console.WriteLine("Please enter a whole number >= 2, or -1 to exit.\n");
+                    continue;
                 }
-            } while (continueLoop);
+
+                if (n == EXIT_CODE)
+                {
+                    break;
+                }
+
+                Stopwatch stopWatch = Stopwatch.StartNew();
+                IReadOnlyList<int> primes = primeNumberGenerator.CalculatePrimes(n);
+                stopWatch.Stop();
+                Console.WriteLine($"Execution Time: {stopWatch.Elapsed.TotalSeconds} seconds");
+
+                AskUserToPrintPrimes(primes);
+            }
         }
 
-        private static void AskUserToPrintPrimes()
+        private static void AskUserToPrintPrimes(IReadOnlyList<int> primes)
         {
             Console.WriteLine("Print Prime Numbers to Console? (y/n)");
             string userInput = Console.ReadLine();
 
-            if (userInput.ToLower() == "y")
+            if (string.Equals(userInput, "y", StringComparison.OrdinalIgnoreCase))
             {
-                primeNumberGenerator?.LogPrimeNumbers();
+                PrintPrimes(primes);
             }
             Console.Write("\n\n");
+        }
+
+        private static void PrintPrimes(IReadOnlyList<int> primes)
+        {
+            if (primes.Count == 0)
+            {
+                Console.WriteLine("No prime numbers");
+            }
+            else
+            {
+                Console.WriteLine("Prime Numbers:");
+                foreach (int prime in primes)
+                {
+                    Console.Write($"{prime} ");
+                }
+                Console.Write("\n");
+            }
         }
     }
 }
