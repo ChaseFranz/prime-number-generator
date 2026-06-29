@@ -82,10 +82,21 @@ the print prompt, and enter `-1` to exit.
 
 ## Tests
 
-There is currently **no test project**. If adding tests, create a separate test
-project (e.g. xUnit/NUnit), add it to the solution, and target the prime logic in
-`PrimeNumberGenerator` — keep computation logic out of `Program` so it stays
-testable.
+Unit tests live in `ComputePrimeNumbers/ComputePrimeNumbers.Tests/` (xUnit,
+`netcoreapp3.1`) and are registered in the solution. They cover
+`PrimeNumberGenerator.CalculatePrimes`: below-2 inputs, small known prime sets,
+ascending order, inclusive upper bound, prime-counting (`pi`) counts at 100/1000/
+10000, a "every result is actually prime" check, and a cross-check against an
+independent trial-division reference over a range that spans many parallel
+segments.
+
+```bash
+# From the repository root
+dotnet test ComputePrimeNumbers/ComputePrimeNumbers.sln
+```
+
+Keep computation logic in `PrimeNumberGenerator` (not `Program`) so it stays
+testable, and add cases here when you change the algorithm.
 
 ## Git workflow
 
